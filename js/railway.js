@@ -202,26 +202,29 @@ async function loadRailways(position) {
   trackValue.textContent = "hledám…";
   const query = `[out:json][timeout:12];(way(around:${SEARCH_RADIUS_METRES},${position.latitude},${position.longitude})[railway~"^(rail|light_rail|narrow_gauge)$"];way(around:${SEARCH_RADIUS_METRES},${position.latitude},${position.longitude})[railway="platform_edge"][ref];);out tags geom;`;
 
+  let dmvsNearbyWays = [];
+
   try {
     const dmvs = window.RailNavigatorDMVS;
     if (dmvs) {
       await dmvs.ready;
-      const dmvsWays = dmvs.getNearbyWays(position, SEARCH_RADIUS_METRES);
-      if (dmvsWays.length) {
-        railwayWays = dmvsWays;
-        supplementalTrackLabels.clearLayers();
-        lastQueryPosition = position;
-        lastQueryTime = Date.now();
-        updateNearestTrack(position);
-        return;
-      }
+      dmvsNearbyWays = dmvs.getNearbyWays(position, SEARCH_RADIUS_METRES);
     }
 
     const response = await fetch(`${OVERPASS_URL}?data=${encodeURIComponent(query)}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const elements = Array.isArray(data.elements) ? data.elements : [];
-    railwayWays = elements.filter((element) => /^(rail|light_rail|narrow_gauge)$/.test(element.tags?.railway || ""));
+    const osmWays = elements.filter((element) => /^(rail|light_rail|narrow_gauge)$/.test(element.tags?.railway || ""));
+    const supplementalOsmWays = dmvsNearbyWays.length
+      ? osmWays.filter((way) => {
+          if (!Array.isArray(way.geometry) || !way.geometry.length) return false;
+          const middle = geometryMidpoint(way.geometry);
+          const middlePosition = { latitude: middle.lat, longitude: middle.lon };
+          return dmvsNearbyWays.every((dmvsWay) => measureWay(middlePosition, dmvsWay.geometry).distance > 8);
+        })
+      : osmWays;
+    railwayWays = [...dmvsNearbyWays, ...supplementalOsmWays];
     addSupplementalTrackReferences(elements);
     renderSupplementalLabels();
     lastQueryPosition = position;
@@ -236,6 +239,14 @@ async function loadRailways(position) {
       updateNearestTrack(position);
     }
   } catch (error) {
+    if (dmvsNearbyWays.length) {
+      railwayWays = dmvsNearbyWays;
+      supplementalTrackLabels.clearLayers();
+      lastQueryPosition = position;
+      lastQueryTime = Date.now();
+      updateNearestTrack(position);
+      return;
+    }
     trackValue.textContent = "data nedostupná";
     console.warn("Načtení železničních dat selhalo:", error);
   } finally {
