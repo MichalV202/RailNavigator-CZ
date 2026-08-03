@@ -1,0 +1,12 @@
+{
+  "name": "RailNavigator CZ",
+  "short_name": "RailNavigator",
+  "description": "Mobilní železniční navigace s GPS a rychloměrem.",
+  "lang": "cs",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#101820",
+  "theme_color": "#101820"
+}
