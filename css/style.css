@@ -171,6 +171,20 @@ body { background: #101820; }
   font-size: 0.78rem;
 }
 
+.supplemental-track-label {
+  padding: 2px 5px;
+  color: #fff;
+  background: #111;
+  border: 2px solid #00e5ff;
+  border-radius: 5px;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.supplemental-track-label::before { display: none; }
+
 .train-icon {
   display: grid;
   place-items: center;
