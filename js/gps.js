@@ -115,6 +115,10 @@ function updatePosition(position) {
   }
 
   lastPoint = point;
+
+  window.dispatchEvent(new CustomEvent("railnavigator:position", {
+    detail: { latitude, longitude, accuracy }
+  }));
 }
 
 recordButton.addEventListener("click", () => {
