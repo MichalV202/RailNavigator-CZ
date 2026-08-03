@@ -2,6 +2,7 @@
 
 const trackValue = document.getElementById("track");
 const trackDistanceValue = document.getElementById("track-distance");
+const trackConfidenceValue = document.getElementById("track-confidence");
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 const SEARCH_RADIUS_METRES = 150;
 const MAX_TRACK_DISTANCE_METRES = 45;
@@ -12,6 +13,9 @@ let railwayWays = [];
 let lastQueryPosition = null;
 let lastQueryTime = 0;
 let queryInProgress = false;
+let lockedWayId = null;
+let challengerWayId = null;
+let challengerWins = 0;
 
 function localPoint(latitude, longitude, originLatitude, originLongitude) {
   const metresPerDegreeLatitude = 111320;
@@ -38,15 +42,26 @@ function distanceBetweenPositions(first, second) {
   return Math.hypot(point.x, point.y);
 }
 
-function distanceToWay(position, geometry) {
+function segmentBearing(start, end) {
+  return (Math.atan2(end.x - start.x, end.y - start.y) * 180 / Math.PI + 360) % 360;
+}
+
+function directionDifference(first, second) {
+  const direct = Math.abs(first - second) % 360;
+  const opposite = Math.abs(first - ((second + 180) % 360)) % 360;
+  return Math.min(direct, 360 - direct, opposite, 360 - opposite);
+}
+
+function measureWay(position, geometry) {
   const point = { x: 0, y: 0 };
-  let shortest = Infinity;
+  let result = { distance: Infinity, bearing: null };
   for (let index = 1; index < geometry.length; index += 1) {
     const start = localPoint(geometry[index - 1].lat, geometry[index - 1].lon, position.latitude, position.longitude);
     const end = localPoint(geometry[index].lat, geometry[index].lon, position.latitude, position.longitude);
-    shortest = Math.min(shortest, pointToSegmentDistance(point, start, end));
+    const distance = pointToSegmentDistance(point, start, end);
+    if (distance < result.distance) result = { distance, bearing: segmentBearing(start, end) };
   }
-  return shortest;
+  return result;
 }
 
 function describeTrack(tags = {}) {
@@ -65,19 +80,51 @@ function describeTrack(tags = {}) {
 
 function updateNearestTrack(position) {
   if (!railwayWays.length) return;
-  let nearest = null;
+  const candidates = [];
   for (const way of railwayWays) {
     if (!Array.isArray(way.geometry) || way.geometry.length < 2) continue;
-    const distance = distanceToWay(position, way.geometry);
-    if (!nearest || distance < nearest.distance) nearest = { way, distance };
+    const measurement = measureWay(position, way.geometry);
+    const directionPenalty = Number.isFinite(position.heading) && Number(position.speedKmh) >= 4
+      ? directionDifference(position.heading, measurement.bearing) * 0.12
+      : 0;
+    candidates.push({ way, ...measurement, score: measurement.distance + directionPenalty });
   }
-  if (!nearest) return;
+  candidates.sort((first, second) => first.score - second.score);
+  if (!candidates.length) return;
 
-  trackDistanceValue.textContent = `${Math.round(nearest.distance)} m`;
+  const best = candidates[0];
+  const lockedCandidate = candidates.find((candidate) => candidate.way.id === lockedWayId);
+  let selected = lockedCandidate || best;
+  if (lockedWayId === null || !lockedCandidate) lockedWayId = best.way.id;
+
+  if (best.way.id !== lockedWayId && best.score + 6 < selected.score) {
+    if (challengerWayId === best.way.id) challengerWins += 1;
+    else {
+      challengerWayId = best.way.id;
+      challengerWins = 1;
+    }
+    if (challengerWins >= 4) {
+      lockedWayId = best.way.id;
+      selected = best;
+      challengerWayId = null;
+      challengerWins = 0;
+    }
+  } else {
+    challengerWayId = null;
+    challengerWins = 0;
+  }
+
+  trackDistanceValue.textContent = `${Math.round(selected.distance)} m`;
   const allowedDistance = Math.max(MAX_TRACK_DISTANCE_METRES, Number(position.accuracy) || 0);
-  trackValue.textContent = nearest.distance <= allowedDistance
-    ? describeTrack(nearest.way.tags)
+  trackValue.textContent = selected.distance <= allowedDistance
+    ? describeTrack(selected.way.tags)
     : "mimo kolej";
+
+  const second = candidates.find((candidate) => candidate.way.id !== selected.way.id);
+  const separation = second ? second.score - selected.score : 20;
+  if (Number(position.accuracy) <= 8 && separation >= 6) trackConfidenceValue.textContent = "vysoká";
+  else if (Number(position.accuracy) <= 20 && separation >= 3) trackConfidenceValue.textContent = "střední";
+  else trackConfidenceValue.textContent = "nízká";
 }
 
 async function loadRailways(position) {
@@ -95,6 +142,7 @@ async function loadRailways(position) {
     if (!railwayWays.length) {
       trackValue.textContent = "nenalezena";
       trackDistanceValue.textContent = "-- m";
+      trackConfidenceValue.textContent = "--";
     } else {
       updateNearestTrack(position);
     }
