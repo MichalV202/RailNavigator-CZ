@@ -1,8 +1,8 @@
-const CACHE_NAME = "railnavigator-cz-v3-1";
+const CACHE_NAME = "railnavigator-cz-v3-2";
 const APP_FILES = [
   "./",
   "./index.html",
-  "./css/style.css",
+  "./css/style.css?v=0.3.2",
   "./js/app.js",
   "./js/gps.js",
   "./manifest.json",
