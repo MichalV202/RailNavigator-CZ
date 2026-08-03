@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101820">
   <meta name="description" content="Mobilní železniční navigace s GPS a rychloměrem.">
-  <title>RailNavigator CZ 0.4</title>
+  <title>RailNavigator CZ 0.5</title>
 
   <link rel="manifest" href="./manifest.json">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
@@ -32,15 +32,33 @@
   <nav id="drive-controls" aria-label="Ovládání jízdy">
     <button id="follow-button" class="active" type="button">◎ Sledovat</button>
     <button id="record-button" type="button">● Záznam</button>
+    <button id="summary-button" type="button">▤ Test</button>
     <button id="export-button" type="button" disabled>⇩ CSV</button>
     <button id="wake-button" type="button">☀ Displej</button>
   </nav>
 
   <div id="notice" role="status" aria-live="polite"></div>
 
+  <section id="test-panel" class="test-panel" hidden aria-label="Souhrn testovací jízdy">
+    <header>
+      <strong>Testovací jízda</strong>
+      <button id="close-summary-button" type="button" aria-label="Zavřít">×</button>
+    </header>
+    <div class="test-grid">
+      <span>Doba</span><strong id="stat-duration">00:00:00</strong>
+      <span>Vzdálenost</span><strong id="stat-distance">0.00 km</strong>
+      <span>Průměr</span><strong id="stat-average-speed">0 km/h</strong>
+      <span>Maximum</span><strong id="stat-max-speed">0 km/h</strong>
+      <span>Průměrná GPS</span><strong id="stat-average-accuracy">-- m</strong>
+      <span>GPS bodů</span><strong id="stat-samples">0</strong>
+      <span>Změn koleje</span><strong id="stat-track-changes">0</strong>
+    </div>
+    <p>Všechna data zůstávají v tomto telefonu, dokud je nestáhneš jako CSV.</p>
+  </section>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="./js/app.js?v=0.4.1"></script>
-  <script src="./js/railway.js?v=0.4.1"></script>
-  <script src="./js/gps.js?v=0.4.1"></script>
+  <script src="./js/app.js?v=0.5"></script>
+  <script src="./js/railway.js?v=0.5"></script>
+  <script src="./js/gps.js?v=0.5"></script>
 </body>
 </html>
