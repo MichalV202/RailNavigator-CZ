@@ -1,4 +1,4 @@
-const CACHE_NAME = "railnavigator-cz-v1";
+const CACHE_NAME = "railnavigator-cz-v3";
 const APP_FILES = [
   "./",
   "./index.html",
