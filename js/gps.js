@@ -8,6 +8,7 @@ const exportButton = document.getElementById("export-button");
 const summaryButton = document.getElementById("summary-button");
 const testPanel = document.getElementById("test-panel");
 const closeSummaryButton = document.getElementById("close-summary-button");
+const SESSION_STORAGE_KEY = "railnavigator-session-v2";
 
 const trainIcon = L.divIcon({
   className: "train-icon",
@@ -117,7 +118,14 @@ function bearingDegrees(a, b) {
 }
 
 function saveSession() {
-  localStorage.setItem("railnavigator-last-session", JSON.stringify(samples.slice(-10000)));
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
+    version: 2,
+    recording,
+    savedAt: Date.now(),
+    samples: samples.slice(-10000),
+    stats,
+    lastRecordedPoint
+  }));
 }
 
 function updateRecordingControls() {
@@ -211,7 +219,7 @@ function updatePosition(position) {
     });
     trailLine.addLatLng(coordinates);
     updateStatsPanel();
-    if (samples.length % 10 === 0) saveSession();
+    if (samples.length % 5 === 0) saveSession();
     exportButton.disabled = false;
   }
 
@@ -239,6 +247,7 @@ recordButton.addEventListener("click", () => {
     trailLine.setLatLngs([]);
     clearInterval(statsTimer);
     statsTimer = setInterval(updateStatsPanel, 1000);
+    saveSession();
     showNotice("Testovací záznam byl spuštěn. Data zůstávají v telefonu.");
   } else {
     stats.stoppedAt = Date.now();
@@ -248,6 +257,14 @@ recordButton.addEventListener("click", () => {
     showNotice(`Záznam zastaven: ${samples.length} GPS bodů.`);
   }
   updateRecordingControls();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && (recording || samples.length)) saveSession();
+});
+
+window.addEventListener("pagehide", () => {
+  if (recording || samples.length) saveSession();
 });
 
 exportButton.addEventListener("click", () => {
@@ -295,8 +312,21 @@ window.addEventListener("railnavigator:track", (event) => {
 });
 
 try {
-  const stored = JSON.parse(localStorage.getItem("railnavigator-last-session") || "[]");
-  if (Array.isArray(stored) && stored.length) samples = stored;
+  const storedV2 = JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || "null");
+  const storedLegacy = JSON.parse(localStorage.getItem("railnavigator-last-session") || "[]");
+  if (storedV2?.version === 2 && Array.isArray(storedV2.samples)) {
+    samples = storedV2.samples;
+    stats = { ...createEmptyStats(), ...(storedV2.stats || {}) };
+    lastRecordedPoint = storedV2.lastRecordedPoint || null;
+    recording = Boolean(storedV2.recording);
+    if (recording) {
+      stats.stoppedAt = null;
+      statsTimer = setInterval(updateStatsPanel, 1000);
+      setTimeout(() => showNotice(`Záznam obnoven: ${samples.length} GPS bodů.`), 800);
+    }
+  } else if (Array.isArray(storedLegacy) && storedLegacy.length) {
+    samples = storedLegacy;
+  }
 } catch (error) {
   console.warn("Poslední záznam se nepodařilo načíst:", error);
 }
