@@ -1,11 +1,11 @@
-const CACHE_NAME = "railnavigator-cz-v4";
+const CACHE_NAME = "railnavigator-cz-v4-1";
 const APP_FILES = [
   "./",
   "./index.html",
   "./css/style.css?v=0.3.2",
-  "./js/app.js?v=0.4",
-  "./js/railway.js?v=0.4",
-  "./js/gps.js?v=0.4",
+  "./js/app.js?v=0.4.1",
+  "./js/railway.js?v=0.4.1",
+  "./js/gps.js?v=0.4.1",
   "./manifest.json",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
