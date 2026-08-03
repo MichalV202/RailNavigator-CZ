@@ -5,6 +5,9 @@ const gpsStatus = document.getElementById("gps-status");
 const headingValue = document.getElementById("heading");
 const recordButton = document.getElementById("record-button");
 const exportButton = document.getElementById("export-button");
+const summaryButton = document.getElementById("summary-button");
+const testPanel = document.getElementById("test-panel");
+const closeSummaryButton = document.getElementById("close-summary-button");
 
 const trainIcon = L.divIcon({
   className: "train-icon",
@@ -19,6 +22,52 @@ let lastPoint = null;
 let recording = false;
 let samples = [];
 let gpsHistory = [];
+let lastRecordedPoint = null;
+let lastMatchedWayId = null;
+let statsTimer = null;
+let stats = createEmptyStats();
+const trailLine = L.polyline([], {
+  color: "#ffcc00",
+  weight: 4,
+  opacity: 0.9,
+  interactive: false
+}).addTo(map);
+
+function createEmptyStats() {
+  return {
+    startedAt: null,
+    stoppedAt: null,
+    distanceMetres: 0,
+    speedSum: 0,
+    speedSamples: 0,
+    maxSpeed: 0,
+    accuracySum: 0,
+    accuracySamples: 0,
+    trackChanges: 0
+  };
+}
+
+function formatDuration(milliseconds) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+  const minutes = String(Math.floor(totalSeconds % 3600 / 60)).padStart(2, "0");
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${hours}:${minutes}:${seconds}`;
+}
+
+function updateStatsPanel() {
+  const endTime = recording ? Date.now() : (stats.stoppedAt || Date.now());
+  const duration = stats.startedAt ? endTime - stats.startedAt : 0;
+  const averageSpeed = stats.speedSamples ? stats.speedSum / stats.speedSamples : 0;
+  const averageAccuracy = stats.accuracySamples ? stats.accuracySum / stats.accuracySamples : null;
+  document.getElementById("stat-duration").textContent = formatDuration(duration);
+  document.getElementById("stat-distance").textContent = `${(stats.distanceMetres / 1000).toFixed(2)} km`;
+  document.getElementById("stat-average-speed").textContent = `${Math.round(averageSpeed)} km/h`;
+  document.getElementById("stat-max-speed").textContent = `${Math.round(stats.maxSpeed)} km/h`;
+  document.getElementById("stat-average-accuracy").textContent = averageAccuracy === null ? "-- m" : `${Math.round(averageAccuracy)} m`;
+  document.getElementById("stat-samples").textContent = String(samples.length);
+  document.getElementById("stat-track-changes").textContent = String(stats.trackChanges);
+}
 
 function smoothGpsPosition(latitude, longitude, accuracy, timestamp, speed) {
   gpsHistory.push({ latitude, longitude, accuracy: Math.max(accuracy || 50, 3), timestamp });
@@ -126,15 +175,42 @@ function updatePosition(position) {
   }
 
   if (recording) {
+    const filteredPoint = { latitude: smoothed.latitude, longitude: smoothed.longitude };
+    const rawPoint = { latitude, longitude };
+    const speedKmh = Number.isFinite(speed) ? speed * 3.6 : null;
+    if (lastRecordedPoint) {
+      const stepDistance = distanceMetres(lastRecordedPoint, filteredPoint);
+      if (stepDistance < 1000) stats.distanceMetres += stepDistance;
+    }
+    lastRecordedPoint = filteredPoint;
+    if (speedKmh !== null) {
+      stats.speedSum += speedKmh;
+      stats.speedSamples += 1;
+      stats.maxSpeed = Math.max(stats.maxSpeed, speedKmh);
+    }
+    if (Number.isFinite(accuracy)) {
+      stats.accuracySum += accuracy;
+      stats.accuracySamples += 1;
+    }
+
     samples.push({
       time: new Date(position.timestamp).toISOString(),
-      latitude,
-      longitude,
+      rawLatitude: latitude,
+      rawLongitude: longitude,
+      filteredLatitude: smoothed.latitude,
+      filteredLongitude: smoothed.longitude,
+      filterOffset: Math.round(distanceMetres(rawPoint, filteredPoint) * 10) / 10,
       accuracy: Math.round(accuracy * 10) / 10,
       speedKmh: Number.isFinite(speed) ? Math.round(speed * 36) / 10 : "",
       heading: heading === null ? "" : Math.round(heading),
-      altitude: Number.isFinite(altitude) ? Math.round(altitude * 10) / 10 : ""
+      altitude: Number.isFinite(altitude) ? Math.round(altitude * 10) / 10 : "",
+      trackId: "",
+      trackLabel: "",
+      trackDistance: "",
+      trackConfidence: ""
     });
+    trailLine.addLatLng(coordinates);
+    updateStatsPanel();
     if (samples.length % 10 === 0) saveSession();
     exportButton.disabled = false;
   }
@@ -156,8 +232,18 @@ recordButton.addEventListener("click", () => {
   recording = !recording;
   if (recording) {
     samples = [];
+    stats = createEmptyStats();
+    stats.startedAt = Date.now();
+    lastRecordedPoint = null;
+    lastMatchedWayId = null;
+    trailLine.setLatLngs([]);
+    clearInterval(statsTimer);
+    statsTimer = setInterval(updateStatsPanel, 1000);
     showNotice("Testovací záznam byl spuštěn. Data zůstávají v telefonu.");
   } else {
+    stats.stoppedAt = Date.now();
+    clearInterval(statsTimer);
+    updateStatsPanel();
     saveSession();
     showNotice(`Záznam zastaven: ${samples.length} GPS bodů.`);
   }
@@ -166,14 +252,46 @@ recordButton.addEventListener("click", () => {
 
 exportButton.addEventListener("click", () => {
   if (!samples.length) return;
-  const columns = ["time", "latitude", "longitude", "accuracy", "speedKmh", "heading", "altitude"];
-  const csv = [columns.join(","), ...samples.map((row) => columns.map((key) => row[key]).join(","))].join("\n");
+  const columns = [
+    "time", "rawLatitude", "rawLongitude", "filteredLatitude", "filteredLongitude",
+    "filterOffset", "accuracy", "speedKmh", "heading", "altitude",
+    "trackId", "trackLabel", "trackDistance", "trackConfidence"
+  ];
+  const csvEscape = (value) => {
+    const text = String(value ?? "");
+    return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  };
+  const csv = [columns.join(","), ...samples.map((row) => columns.map((key) => csvEscape(row[key])).join(","))].join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = `railnavigator-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
   link.click();
   URL.revokeObjectURL(link.href);
+});
+
+summaryButton.addEventListener("click", () => {
+  updateStatsPanel();
+  testPanel.hidden = false;
+});
+
+closeSummaryButton.addEventListener("click", () => {
+  testPanel.hidden = true;
+});
+
+window.addEventListener("railnavigator:track", (event) => {
+  const track = event.detail;
+  if (recording && lastMatchedWayId !== null && track.wayId !== lastMatchedWayId) {
+    stats.trackChanges += 1;
+  }
+  lastMatchedWayId = track.wayId;
+  const lastSample = samples[samples.length - 1];
+  if (recording && lastSample) {
+    lastSample.trackId = track.wayId;
+    lastSample.trackLabel = track.label;
+    lastSample.trackDistance = track.distance;
+    lastSample.trackConfidence = track.confidence;
+  }
 });
 
 try {
