@@ -203,6 +203,20 @@ async function loadRailways(position) {
   const query = `[out:json][timeout:12];(way(around:${SEARCH_RADIUS_METRES},${position.latitude},${position.longitude})[railway~"^(rail|light_rail|narrow_gauge)$"];way(around:${SEARCH_RADIUS_METRES},${position.latitude},${position.longitude})[railway="platform_edge"][ref];);out tags geom;`;
 
   try {
+    const dmvs = window.RailNavigatorDMVS;
+    if (dmvs) {
+      await dmvs.ready;
+      const dmvsWays = dmvs.getNearbyWays(position, SEARCH_RADIUS_METRES);
+      if (dmvsWays.length) {
+        railwayWays = dmvsWays;
+        supplementalTrackLabels.clearLayers();
+        lastQueryPosition = position;
+        lastQueryTime = Date.now();
+        updateNearestTrack(position);
+        return;
+      }
+    }
+
     const response = await fetch(`${OVERPASS_URL}?data=${encodeURIComponent(query)}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
