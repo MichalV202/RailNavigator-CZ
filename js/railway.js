@@ -16,6 +16,13 @@ let queryInProgress = false;
 let lockedWayId = null;
 let challengerWayId = null;
 let challengerWins = 0;
+let highlightedWayId = null;
+const selectedTrackLine = L.polyline([], {
+  color: "#00e5ff",
+  weight: 6,
+  opacity: 0.85,
+  interactive: false
+}).addTo(map);
 
 function localPoint(latitude, longitude, originLatitude, originLongitude) {
   const metresPerDegreeLatitude = 111320;
@@ -122,9 +129,24 @@ function updateNearestTrack(position) {
 
   const second = candidates.find((candidate) => candidate.way.id !== selected.way.id);
   const separation = second ? second.score - selected.score : 20;
-  if (Number(position.accuracy) <= 8 && separation >= 6) trackConfidenceValue.textContent = "vysoká";
-  else if (Number(position.accuracy) <= 20 && separation >= 3) trackConfidenceValue.textContent = "střední";
-  else trackConfidenceValue.textContent = "nízká";
+  let confidence = "nízká";
+  if (Number(position.accuracy) <= 8 && separation >= 6) confidence = "vysoká";
+  else if (Number(position.accuracy) <= 20 && separation >= 3) confidence = "střední";
+  trackConfidenceValue.textContent = confidence;
+
+  if (highlightedWayId !== selected.way.id) {
+    highlightedWayId = selected.way.id;
+    selectedTrackLine.setLatLngs(selected.way.geometry.map((point) => [point.lat, point.lon]));
+  }
+
+  window.dispatchEvent(new CustomEvent("railnavigator:track", {
+    detail: {
+      wayId: selected.way.id,
+      label: trackValue.textContent,
+      distance: Math.round(selected.distance * 10) / 10,
+      confidence
+    }
+  }));
 }
 
 async function loadRailways(position) {
@@ -143,6 +165,7 @@ async function loadRailways(position) {
       trackValue.textContent = "nenalezena";
       trackDistanceValue.textContent = "-- m";
       trackConfidenceValue.textContent = "--";
+      selectedTrackLine.setLatLngs([]);
     } else {
       updateNearestTrack(position);
     }
