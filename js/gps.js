@@ -18,6 +18,30 @@ let firstGpsFix = true;
 let lastPoint = null;
 let recording = false;
 let samples = [];
+let gpsHistory = [];
+
+function smoothGpsPosition(latitude, longitude, accuracy, timestamp, speed) {
+  gpsHistory.push({ latitude, longitude, accuracy: Math.max(accuracy || 50, 3), timestamp });
+  gpsHistory = gpsHistory
+    .filter((item) => timestamp - item.timestamp <= 8000)
+    .slice(-7);
+
+  let latitudeSum = 0;
+  let longitudeSum = 0;
+  let weightSum = 0;
+  const smoothingTime = Number.isFinite(speed) && speed * 3.6 >= 15 ? 350 : 1800;
+  for (const item of gpsHistory) {
+    const ageFactor = Math.exp(-(timestamp - item.timestamp) / smoothingTime);
+    const weight = ageFactor / (item.accuracy * item.accuracy);
+    latitudeSum += item.latitude * weight;
+    longitudeSum += item.longitude * weight;
+    weightSum += weight;
+  }
+  return {
+    latitude: latitudeSum / weightSum,
+    longitude: longitudeSum / weightSum
+  };
+}
 
 function distanceMetres(a, b) {
   const earthRadius = 6371000;
@@ -67,8 +91,9 @@ function showGpsError(error) {
 
 function updatePosition(position) {
   const { latitude, longitude, speed, accuracy, altitude } = position.coords;
-  const coordinates = [latitude, longitude];
-  const point = { latitude, longitude };
+  const smoothed = smoothGpsPosition(latitude, longitude, accuracy, position.timestamp, speed);
+  const coordinates = [smoothed.latitude, smoothed.longitude];
+  const point = smoothed;
   let heading = Number.isFinite(position.coords.heading) ? position.coords.heading : null;
 
   if (heading === null && lastPoint && distanceMetres(lastPoint, point) >= 3) {
@@ -117,7 +142,13 @@ function updatePosition(position) {
   lastPoint = point;
 
   window.dispatchEvent(new CustomEvent("railnavigator:position", {
-    detail: { latitude, longitude, accuracy }
+    detail: {
+      latitude: smoothed.latitude,
+      longitude: smoothed.longitude,
+      accuracy,
+      heading,
+      speedKmh: Number.isFinite(speed) ? speed * 3.6 : null
+    }
   }));
 }
 
