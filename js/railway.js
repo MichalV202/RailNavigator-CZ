@@ -4,7 +4,7 @@ const trackValue = document.getElementById("track");
 const trackDistanceValue = document.getElementById("track-distance");
 const trackConfidenceValue = document.getElementById("track-confidence");
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
-const SEARCH_RADIUS_METRES = 150;
+const SEARCH_RADIUS_METRES = 350;
 const MAX_TRACK_DISTANCE_METRES = 45;
 const REFRESH_DISTANCE_METRES = 100;
 const REFRESH_INTERVAL_MS = 30000;
@@ -23,6 +23,7 @@ const selectedTrackLine = L.polyline([], {
   opacity: 0.85,
   interactive: false
 }).addTo(map);
+const supplementalTrackLabels = L.layerGroup().addTo(map);
 
 function localPoint(latitude, longitude, originLatitude, originLongitude) {
   const metresPerDegreeLatitude = 111320;
@@ -72,7 +73,7 @@ function measureWay(position, geometry) {
 }
 
 function describeTrack(tags = {}) {
-  const trackReference = tags["railway:track_ref"] || tags.local_ref;
+  const trackReference = tags["railway:track_ref"] || tags.derived_track_ref || tags.local_ref;
   if (trackReference) return String(trackReference);
   if (tags.ref) return `trať ${tags.ref}`;
   if (tags.name) return tags.name;
@@ -83,6 +84,53 @@ function describeTrack(tags = {}) {
     crossover: "spojovací"
   };
   return services[tags.service] || "bez označení";
+}
+
+function geometryMidpoint(geometry) {
+  return geometry[Math.floor(geometry.length / 2)];
+}
+
+function addSupplementalTrackReferences(elements) {
+  const platformEdges = elements.filter((element) =>
+    element.tags?.railway === "platform_edge"
+    && element.tags?.ref
+    && Array.isArray(element.geometry)
+    && element.geometry.length >= 2
+  );
+
+  for (const edge of platformEdges) {
+    const middle = geometryMidpoint(edge.geometry);
+    const position = { latitude: middle.lat, longitude: middle.lon };
+    let nearest = null;
+    for (const way of railwayWays) {
+      if (way.tags?.["railway:track_ref"] || !Array.isArray(way.geometry)) continue;
+      const measurement = measureWay(position, way.geometry);
+      if (!nearest || measurement.distance < nearest.distance) nearest = { way, ...measurement };
+    }
+    if (nearest && nearest.distance <= 25) {
+      nearest.way.tags = { ...nearest.way.tags, derived_track_ref: edge.tags.ref };
+    }
+  }
+}
+
+function renderSupplementalLabels() {
+  supplementalTrackLabels.clearLayers();
+  if (map.getZoom() < 17) return;
+  const shown = new Set();
+  for (const way of railwayWays) {
+    const label = way.tags?.derived_track_ref;
+    if (!label || shown.has(label) || !Array.isArray(way.geometry) || !way.geometry.length) continue;
+    shown.add(label);
+    const middle = geometryMidpoint(way.geometry);
+    L.marker([middle.lat, middle.lon], { opacity: 0, interactive: false })
+      .bindTooltip(String(label), {
+        permanent: true,
+        direction: "center",
+        className: "supplemental-track-label",
+        opacity: 1
+      })
+      .addTo(supplementalTrackLabels);
+  }
 }
 
 function updateNearestTrack(position) {
@@ -152,13 +200,16 @@ function updateNearestTrack(position) {
 async function loadRailways(position) {
   queryInProgress = true;
   trackValue.textContent = "hledám…";
-  const query = `[out:json][timeout:10];way(around:${SEARCH_RADIUS_METRES},${position.latitude},${position.longitude})[railway~"^(rail|light_rail|narrow_gauge)$"];out tags geom;`;
+  const query = `[out:json][timeout:12];(way(around:${SEARCH_RADIUS_METRES},${position.latitude},${position.longitude})[railway~"^(rail|light_rail|narrow_gauge)$"];way(around:${SEARCH_RADIUS_METRES},${position.latitude},${position.longitude})[railway="platform_edge"][ref];);out tags geom;`;
 
   try {
     const response = await fetch(`${OVERPASS_URL}?data=${encodeURIComponent(query)}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    railwayWays = Array.isArray(data.elements) ? data.elements : [];
+    const elements = Array.isArray(data.elements) ? data.elements : [];
+    railwayWays = elements.filter((element) => /^(rail|light_rail|narrow_gauge)$/.test(element.tags?.railway || ""));
+    addSupplementalTrackReferences(elements);
+    renderSupplementalLabels();
     lastQueryPosition = position;
     lastQueryTime = Date.now();
     if (!railwayWays.length) {
@@ -166,6 +217,7 @@ async function loadRailways(position) {
       trackDistanceValue.textContent = "-- m";
       trackConfidenceValue.textContent = "--";
       selectedTrackLine.setLatLngs([]);
+      supplementalTrackLabels.clearLayers();
     } else {
       updateNearestTrack(position);
     }
@@ -185,3 +237,5 @@ window.addEventListener("railnavigator:position", (event) => {
   const waitedLongEnough = Date.now() - lastQueryTime >= REFRESH_INTERVAL_MS;
   if (!queryInProgress && movedFarEnough && waitedLongEnough) loadRailways(position);
 });
+
+map.on("zoomend", renderSupplementalLabels);
