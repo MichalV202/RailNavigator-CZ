@@ -1,7 +1,7 @@
 {
   "name": "RailNavigator CZ",
   "short_name": "RailNavigator",
-  "description": "Mobilní železniční navigace s GPS, rychloměrem a záznamem jízdy.",
+  "description": "Mobilní železniční navigace s GPS, určováním koleje a diagnostickým záznamem jízdy.",
   "lang": "cs",
   "start_url": "./",
   "scope": "./",
