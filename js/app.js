@@ -3,18 +3,27 @@
 const DEFAULT_POSITION = [49.2181083, 16.6494211];
 
 const map = L.map("map", {
-  zoomControl: false
+  zoomControl: false,
+  fadeAnimation: false,
+  zoomAnimation: false,
+  markerZoomAnimation: false
 }).setView(DEFAULT_POSITION, 16);
 
 L.control.zoom({ position: "topleft" }).addTo(map);
 
 const streetLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
+  updateWhenZooming: false,
+  updateWhenIdle: true,
+  keepBuffer: 1,
   attribution: "&copy; OpenStreetMap contributors"
 }).addTo(map);
 
 const railwayLayer = L.tileLayer("https://tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png", {
   maxZoom: 19,
+  updateWhenZooming: false,
+  updateWhenIdle: true,
+  keepBuffer: 1,
   opacity: 0.8,
   attribution: "&copy; OpenRailwayMap"
 }).addTo(map);
