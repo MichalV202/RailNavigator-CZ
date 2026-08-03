@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101820">
   <meta name="description" content="Mobilní železniční navigace s GPS a rychloměrem.">
-  <title>RailNavigator CZ 0.5.1</title>
+  <title>RailNavigator CZ 0.6.1</title>
 
   <link rel="manifest" href="./manifest.json">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
@@ -20,6 +20,7 @@
   </section>
 
   <section id="info-panel" aria-label="Informace o jízdě">
+    <div><strong>Data kolejí</strong><span id="track-source">načítám…</span></div>
     <div><strong>Kolej</strong><span id="track">--</span></div>
     <div><strong>Od koleje</strong><span id="track-distance">-- m</span></div>
     <div><strong>Přesnost</strong><span id="track-confidence">--</span></div>
@@ -40,6 +41,7 @@
   <div id="notice" role="status" aria-live="polite"></div>
 
   <section id="test-panel" class="test-panel" hidden aria-label="Souhrn testovací jízdy">
+    <p class="safety-warning">Pouze orientační testovací pomůcka. Nenahrazuje návěsti, TTP, rozkazy ani jiné závazné provozní podklady.</p>
     <header>
       <strong>Testovací jízda</strong>
       <button id="close-summary-button" type="button" aria-label="Zavřít">×</button>
@@ -57,8 +59,10 @@
   </section>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="./js/app.js?v=0.5.1"></script>
-  <script src="./js/railway.js?v=0.5.1"></script>
-  <script src="./js/gps.js?v=0.5.1"></script>
+  <script src="https://unpkg.com/proj4@2.11.0/dist/proj4.js"></script>
+  <script src="./js/app.js?v=0.6.1"></script>
+  <script src="./js/dmvs.js?v=0.6.1"></script>
+  <script src="./js/railway.js?v=0.6.1"></script>
+  <script src="./js/gps.js?v=0.6.1"></script>
 </body>
 </html>
