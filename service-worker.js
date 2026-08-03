@@ -1,14 +1,17 @@
-const CACHE_NAME = "railnavigator-cz-v5-1";
+const CACHE_NAME = "railnavigator-cz-v6-1";
 const APP_FILES = [
   "./",
   "./index.html",
   "./css/style.css?v=0.3.2",
-  "./js/app.js?v=0.5.1",
-  "./js/railway.js?v=0.5.1",
-  "./js/gps.js?v=0.5.1",
+  "./js/app.js?v=0.6.1",
+  "./js/dmvs.js?v=0.6.1",
+  "./js/railway.js?v=0.6.1",
+  "./js/gps.js?v=0.6.1",
+  "./data/dmvs-railways.geojson",
   "./manifest.json",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
-  "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
+  "https://unpkg.com/proj4@2.11.0/dist/proj4.js"
 ];
 
 self.addEventListener("install", (event) => {
