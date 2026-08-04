@@ -47,6 +47,7 @@ body { background: #101820; }
   border-radius: 21px;
   font-weight: 650;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 #speedometer {
@@ -197,16 +198,18 @@ body { background: #101820; }
 .train-icon {
   display: grid;
   place-items: center;
-  width: 42px !important;
-  height: 42px !important;
+  width: 30px !important;
+  height: 30px !important;
   margin: 0 !important;
   color: #fff;
   background: #d62828;
-  border: 3px solid #fff;
+  border: 2px solid #fff;
   border-radius: 50%;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
-  font-size: 19px;
+  font-size: 13px;
   line-height: 1;
+  transition: transform 850ms linear;
+  will-change: transform;
 }
 
 .train-marker-content {
@@ -218,16 +221,61 @@ body { background: #101820; }
 }
 
 .train-arrow {
-  height: 10px;
+  height: 7px;
   color: #fff;
   font-size: 12px;
+}
+
+.note-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.note-options button,
+.custom-note-row button {
+  min-height: 42px;
+  color: #fff;
+  background: #19384a;
+  border: 1px solid #52768a;
+  border-radius: 9px;
+  font-weight: 650;
+}
+
+.note-panel label {
+  display: block;
+  margin: 14px 0 6px;
+  color: #ccc;
+  font-size: 0.82rem;
+}
+
+.custom-note-row { display: flex; gap: 8px; }
+.custom-note-row input {
+  min-width: 0;
+  flex: 1;
+  padding: 9px;
+  color: #fff;
+  background: #151515;
+  border: 1px solid #666;
+  border-radius: 8px;
 }
 
 @media (max-width: 420px) {
   #speedometer { width: 92px; height: 92px; }
   #speed-value { font-size: 1.9rem; }
   #info-panel { width: calc(100vw - 132px); font-size: 0.78rem; }
-  #drive-controls { top: max(8px, env(safe-area-inset-top)); gap: 4px; }
-  #drive-controls button { min-height: 38px; padding: 0 9px; font-size: 0.72rem; }
+  #drive-controls {
+    top: max(8px, env(safe-area-inset-top));
+    left: calc(50% + 20px);
+    width: calc(100vw - 72px);
+    gap: 3px;
+  }
+  #drive-controls button {
+    min-width: 0;
+    min-height: 38px;
+    flex: 1 1 0;
+    padding: 0 4px;
+    font-size: 0.64rem;
+  }
   #notice { top: 54px; font-size: 0.8rem; }
 }
