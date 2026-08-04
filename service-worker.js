@@ -1,12 +1,12 @@
-const CACHE_NAME = "railnavigator-cz-v6-4";
+const CACHE_NAME = "railnavigator-cz-v7-0";
 const APP_FILES = [
   "./",
   "./index.html",
-  "./css/style.css?v=0.3.2",
-  "./js/app.js?v=0.6.4",
-  "./js/dmvs.js?v=0.6.4",
-  "./js/railway.js?v=0.6.4",
-  "./js/gps.js?v=0.6.4",
+  "./css/style.css?v=0.7.0",
+  "./js/app.js?v=0.7.0",
+  "./js/dmvs.js?v=0.7.0",
+  "./js/railway.js?v=0.7.0",
+  "./js/gps.js?v=0.7.0",
   "./data/dmvs-railways.geojson",
   "./manifest.json",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
@@ -40,6 +40,10 @@ self.addEventListener("fetch", (event) => {
         }
         return response;
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./index.html")))
+      .catch(() => caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        if (event.request.mode === "navigate") return caches.match("./index.html");
+        return new Response("Offline", { status: 503, statusText: "Offline" });
+      }))
   );
 });
