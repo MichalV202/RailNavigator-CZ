@@ -11,12 +11,12 @@ const map = L.map("map", {
 
 L.control.zoom({ position: "topleft" }).addTo(map);
 
-const streetLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+const streetLayer = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
   updateWhenZooming: false,
   updateWhenIdle: true,
   keepBuffer: 1,
-  attribution: "&copy; OpenStreetMap contributors"
+  attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank">© OpenStreetMap contributors</a> (ODbL)'
 }).addTo(map);
 
 const railwayLayer = L.tileLayer("https://tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png", {
@@ -36,8 +36,34 @@ L.control.layers(
 
 const appState = {
   latestPosition: null,
-  following: true
+  matchedPosition: null,
+  following: true,
+  networkBytes: 0,
+  networkRequests: 0
 };
+
+const measuredNetworkEntries = new Set();
+
+function registerNetworkEntry(entry) {
+  const entryKey = `${entry.name}|${Math.round(entry.startTime)}|${Math.round(entry.duration)}`;
+  if (measuredNetworkEntries.has(entryKey)) return;
+  measuredNetworkEntries.add(entryKey);
+  const bytes = Number(entry.transferSize || entry.encodedBodySize || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return;
+  appState.networkBytes += bytes;
+  appState.networkRequests += 1;
+  window.dispatchEvent(new CustomEvent("railnavigator:network", {
+    detail: { bytes: appState.networkBytes, requests: appState.networkRequests }
+  }));
+}
+
+try {
+  performance.getEntriesByType("resource").forEach(registerNetworkEntry);
+  const networkObserver = new PerformanceObserver((list) => list.getEntries().forEach(registerNetworkEntry));
+  networkObserver.observe({ type: "resource", buffered: true });
+} catch (error) {
+  console.info("Měření přenesených dat není v tomto prohlížeči úplné.", error);
+}
 
 const followButton = document.getElementById("follow-button");
 const notice = document.getElementById("notice");
@@ -60,7 +86,8 @@ map.on("dragstart", () => setFollowing(false));
 
 followButton.addEventListener("click", () => {
   setFollowing(true);
-  map.setView(appState.latestPosition || DEFAULT_POSITION, appState.latestPosition ? 17 : 16);
+  const target = appState.matchedPosition || appState.latestPosition || DEFAULT_POSITION;
+  map.setView(target, appState.latestPosition ? 17 : 16);
 });
 
 let wakeLock = null;
