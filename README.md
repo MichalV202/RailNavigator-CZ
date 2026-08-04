@@ -1,10 +1,12 @@
-# RailNavigator CZ 0.7.0
+# RailNavigator CZ 0.7.1
 
 Mobilní testovací PWA pro GitHub Pages. Používá GPS telefonu, Leaflet, OpenRailwayMap a pro určení nejbližší koleje umí přednostně využít lokální výřez veřejných dat ČÚZK/DMVS. Když výřez DMVS není přítomen nebo dané místo nepokrývá, automaticky použije OpenStreetMap přes Overpass API.
 
 V oblastech pokrytých DMVS aplikace používá přesnou geometrii ČÚZK a za běhu ji opatrně doplňuje o označení a chybějící vlečky z OpenStreetMap. Původ geometrie a označení zůstává v diagnostickém záznamu oddělený.
 
 Verze 0.7.0 sjednocuje polohu ikony, vybranou kolej a diagnostický záznam. Výběr koleje používá historii, směr, přesnost GPS, rychlost a adaptivní potvrzení změny. Při potvrzeném stání uzamkne ikonu i rychlost, ale surové GPS body dále ukládá.
+
+Verze 0.7.1 zobrazuje rychlost pod 10 km/h na jednu desetinu; při potvrzeném stání zůstává rychloměr uzamčený na `0,0 km/h`.
 
 Rozpracovaný záznam jízdy se průběžně ukládá do IndexedDB a po návratu z hovoru, ukončení aplikace nebo obnovení stránky se automaticky obnoví. CSV nově obsahuje surovou, filtrovanou i přichycenou polohu, kandidátní koleje, všechny rychlosti, důvody rozhodnutí, síťový stav a uživatelské poznámky.
 
