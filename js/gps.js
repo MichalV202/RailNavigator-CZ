@@ -78,6 +78,13 @@ function formatBytes(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function formatSpeedometerValue(speedKmh) {
+  if (!Number.isFinite(speedKmh)) return "--";
+  const speed = Math.max(0, speedKmh);
+  if (speed < 10) return speed.toFixed(1).replace(".", ",");
+  return String(Math.round(speed));
+}
+
 function updateStatsPanel() {
   const endTime = recording ? Date.now() : (stats.stoppedAt || Date.now());
   const duration = stats.startedAt ? endTime - stats.startedAt : 0;
@@ -367,8 +374,7 @@ function updatePosition(position) {
   appState.latestPosition = [point.latitude, point.longitude];
   gpsStatus.textContent = `±${Math.round(accuracy)} m`;
   headingValue.textContent = Number.isFinite(lastReliableHeading) ? `${Math.round(lastReliableHeading)}°` : "--°";
-  speedValue.textContent = Number.isFinite(motion.displayedSpeedKmh)
-    ? String(Math.max(0, Math.round(motion.displayedSpeedKmh))) : "--";
+  speedValue.textContent = formatSpeedometerValue(motion.displayedSpeedKmh);
 
   let sample = null;
   if (recording) {
