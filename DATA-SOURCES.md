@@ -16,7 +16,13 @@ Veřejná sada DI neobsahuje neveřejná data technické infrastruktury ani inte
 
 ## OpenStreetMap a OpenRailwayMap
 
-Pokud pro aktuální polohu není připravený lokální výřez DMVS, aplikace použije jako zálohu OpenStreetMap přes Overpass API. Mapové dlaždice železniční vrstvy poskytuje OpenRailwayMap. Jejich atribuce je zobrazena přímo v mapě.
+OpenStreetMap se přes Overpass API používá jako záložní geometrie mimo výřez DMVS a současně jako doplňkový zdroj označení kolejí a chybějících vleček. Přenos označení na geometrii DMVS probíhá pouze za běhu aplikace a zdroj označení se uchovává samostatně.
+
+- Zdroj: https://www.openstreetmap.org/
+- Licence databáze: Open Data Commons Open Database License (ODbL)
+- Autorská práva: přispěvatelé OpenStreetMap
+
+Mapové dlaždice železniční vrstvy poskytuje OpenRailwayMap. Atribuce OpenStreetMap, OpenRailwayMap a ČÚZK je zobrazena přímo v mapě.
 
 ## Bezpečnostní upozornění
 
