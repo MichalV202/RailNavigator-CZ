@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101820">
   <meta name="description" content="Mobilní železniční navigace s GPS a rychloměrem.">
-  <title>RailNavigator CZ 0.6.4</title>
+  <title>RailNavigator CZ 0.7.0</title>
 
   <link rel="manifest" href="./manifest.json">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-  <link rel="stylesheet" href="./css/style.css?v=0.3.2">
+  <link rel="stylesheet" href="./css/style.css?v=0.7.0">
 </head>
 <body>
   <main id="map" aria-label="Mapa"></main>
@@ -23,7 +23,7 @@
     <div><strong>Data kolejí</strong><span id="track-source">načítám…</span></div>
     <div><strong>Kolej</strong><span id="track">--</span></div>
     <div><strong>Od koleje</strong><span id="track-distance">-- m</span></div>
-    <div><strong>Přesnost</strong><span id="track-confidence">--</span></div>
+    <div><strong>Jistota koleje</strong><span id="track-confidence">--</span></div>
     <div><strong>Sklon</strong><span id="gradient">-- ‰</span></div>
     <div><strong>Další změna</strong><span id="next-gradient">-- m</span></div>
     <div><strong>Směr</strong><span id="heading">--°</span></div>
@@ -34,6 +34,7 @@
     <button id="follow-button" class="active" type="button">◎ Sledovat</button>
     <button id="record-button" type="button">● Záznam</button>
     <button id="summary-button" type="button">▤ Test</button>
+    <button id="note-button" type="button" aria-label="Přidat poznámku">✎</button>
     <button id="export-button" type="button" disabled>⇩ CSV</button>
     <button id="wake-button" type="button">☀ Displej</button>
   </nav>
@@ -54,15 +55,36 @@
       <span>Průměrná GPS</span><strong id="stat-average-accuracy">-- m</strong>
       <span>GPS bodů</span><strong id="stat-samples">0</strong>
       <span>Změn koleje</span><strong id="stat-track-changes">0</strong>
+      <span>Spotřeba dat</span><strong id="stat-data-usage">0 MB</strong>
+      <span>Stav pohybu</span><strong id="stat-movement-state">--</strong>
     </div>
     <p>Všechna data zůstávají v tomto telefonu, dokud je nestáhneš jako CSV.</p>
   </section>
 
+  <section id="note-panel" class="test-panel note-panel" hidden aria-label="Poznámka k jízdě">
+    <header>
+      <strong>Přidat poznámku</strong>
+      <button id="close-note-button" type="button" aria-label="Zavřít">×</button>
+    </header>
+    <div class="note-options">
+      <button type="button" data-note="špatná kolej">Špatná kolej</button>
+      <button type="button" data-note="špatná rychlost">Špatná rychlost</button>
+      <button type="button" data-note="GPS odskočila">GPS odskočila</button>
+      <button type="button" data-note="chybějící kolej">Chybějící kolej</button>
+      <button type="button" data-note="špatné označení">Špatné označení</button>
+    </div>
+    <label for="custom-note">Vlastní poznámka</label>
+    <div class="custom-note-row">
+      <input id="custom-note" type="text" maxlength="160" autocomplete="off">
+      <button id="save-custom-note" type="button">Uložit</button>
+    </div>
+  </section>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="https://unpkg.com/proj4@2.11.0/dist/proj4.js"></script>
-  <script src="./js/app.js?v=0.6.4"></script>
-  <script src="./js/dmvs.js?v=0.6.4"></script>
-  <script src="./js/railway.js?v=0.6.4"></script>
-  <script src="./js/gps.js?v=0.6.4"></script>
+  <script src="./js/app.js?v=0.7.0"></script>
+  <script src="./js/dmvs.js?v=0.7.0"></script>
+  <script src="./js/railway.js?v=0.7.0"></script>
+  <script src="./js/gps.js?v=0.7.0"></script>
 </body>
 </html>
