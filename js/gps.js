@@ -20,8 +20,8 @@ const DB_VERSION = 1;
 const trainIcon = L.divIcon({
   className: "train-icon",
   html: '<span class="train-marker-content"><span class="train-arrow">▲</span><span>🚆</span></span>',
-  iconSize: [30, 30],
-  iconAnchor: [15, 15]
+  iconSize: [24, 24],
+  iconAnchor: [12, 12]
 });
 
 let trainMarker = null;
@@ -45,6 +45,11 @@ let stoppingEvidence = 0;
 let stationaryMatchedAnchor = null;
 let lastReliableHeading = null;
 let trackEventCounter = 0;
+let markerAnimationFrame = null;
+let markerAnimationStartedAt = 0;
+let markerAnimationFrom = null;
+let markerAnimationTarget = null;
+let lastMarkerTargetAt = 0;
 let stats = createEmptyStats();
 const trailLine = L.polyline([], {
   color: "#ffcc00", weight: 4, opacity: 0.9, interactive: false
@@ -81,8 +86,7 @@ function formatBytes(bytes) {
 function formatSpeedometerValue(speedKmh) {
   if (!Number.isFinite(speedKmh)) return "--";
   const speed = Math.max(0, speedKmh);
-  if (speed < 10) return speed.toFixed(1).replace(".", ",");
-  return String(Math.round(speed));
+  return speed.toFixed(1).replace(".", ",");
 }
 
 function updateStatsPanel() {
@@ -146,10 +150,10 @@ function smoothGpsPosition(latitude, longitude, accuracy, timestamp, speed) {
 
 function calculateMotion(point, rawSpeedKmh, accuracy, timestamp) {
   motionHistory.push({ ...point, timestamp });
-  motionHistory = motionHistory.filter((item) => timestamp - item.timestamp <= 12000);
-  const reference = [...motionHistory].reverse().find((item) => timestamp - item.timestamp >= 2800)
+  motionHistory = motionHistory.filter((item) => timestamp - item.timestamp <= 9000);
+  const reference = [...motionHistory].reverse().find((item) => timestamp - item.timestamp >= 1600)
     || motionHistory[0];
-  const longReference = [...motionHistory].reverse().find((item) => timestamp - item.timestamp >= 5500)
+  const longReference = [...motionHistory].reverse().find((item) => timestamp - item.timestamp >= 3600)
     || motionHistory[0];
   const elapsed = Math.max(0.2, (timestamp - reference.timestamp) / 1000);
   const longElapsed = Math.max(0.2, (timestamp - longReference.timestamp) / 1000);
@@ -162,33 +166,34 @@ function calculateMotion(point, rawSpeedKmh, accuracy, timestamp) {
   }
   const movementCoherence = pathDistance > 0 ? netDistance / pathDistance : 0;
   const calculatedSpeedKmh = netDistance / elapsed * 3.6;
-  const noiseRadius = Math.max(3.5, Math.min(9, (Number(accuracy) || 20) * 0.48));
+  const noiseRadius = Math.max(3, Math.min(8, (Number(accuracy) || 20) * 0.42));
   const reliableRaw = Number.isFinite(rawSpeedKmh) ? rawSpeedKmh : null;
-  const strongMovement = (reliableRaw !== null && reliableRaw >= 4)
-    || (elapsed >= 2.8 && netDistance > noiseRadius && calculatedSpeedKmh >= 1.2);
-  const weakMovement = (reliableRaw !== null && reliableRaw >= 0.8) && elapsed >= 2.8
-    && netDistance > noiseRadius * 0.2 && movementCoherence >= 0.82;
-  const looksStopped = longElapsed >= 5.5 && longNetDistance <= noiseRadius
-    && (reliableRaw === null || reliableRaw <= 3.5);
+  const strongMovement = (reliableRaw !== null && reliableRaw >= 1.4)
+    || (elapsed >= 1.6 && netDistance > noiseRadius * 0.75
+      && calculatedSpeedKmh >= 0.9 && movementCoherence >= 0.55);
+  const weakMovement = (reliableRaw !== null && reliableRaw >= 0.6)
+    && elapsed >= 1.6 && netDistance > noiseRadius * 0.35 && movementCoherence >= 0.65;
+  const looksStopped = longElapsed >= 3.6 && longNetDistance <= noiseRadius * 0.9
+    && (reliableRaw === null || reliableRaw <= 1.4);
 
   if (movementState === "určuje se") {
     if (strongMovement) movementState = "jede";
-    else if (timestamp - motionHistory[0].timestamp >= 5500) movementState = "stojí";
+    else if (timestamp - motionHistory[0].timestamp >= 3800) movementState = "stojí";
   } else if (movementState === "stojí") {
     if (strongMovement || weakMovement) movementEvidence += 1;
     else movementEvidence = Math.max(0, movementEvidence - 1);
-    if (movementEvidence >= 2) movementState = "rozjíždí se";
+    if (movementEvidence >= 1) movementState = "rozjíždí se";
   } else if (movementState === "rozjíždí se") {
     if (strongMovement || weakMovement) movementEvidence += 1;
     else movementEvidence = Math.max(0, movementEvidence - 1);
-    if (movementEvidence >= 3) {
+    if (movementEvidence >= 2) {
       movementState = "jede";
       movementEvidence = 0;
     } else if (looksStopped && movementEvidence === 0) movementState = "stojí";
   } else if (movementState === "jede") {
     if (looksStopped) stoppingEvidence += 1;
     else stoppingEvidence = Math.max(0, stoppingEvidence - 1);
-    if (stoppingEvidence >= 4) {
+    if (stoppingEvidence >= 2) {
       movementState = "zastavuje";
       stoppingEvidence = 0;
     }
@@ -196,7 +201,7 @@ function calculateMotion(point, rawSpeedKmh, accuracy, timestamp) {
     if (strongMovement) movementState = "jede";
     else if (looksStopped) stoppingEvidence += 1;
     else stoppingEvidence = Math.max(0, stoppingEvidence - 1);
-    if (stoppingEvidence >= 2) {
+    if (stoppingEvidence >= 1) {
       movementState = "stojí";
       movementEvidence = 0;
       stoppingEvidence = 0;
@@ -209,16 +214,16 @@ function calculateMotion(point, rawSpeedKmh, accuracy, timestamp) {
   else if (reliableRaw !== null) {
     const calculatedIsPlausible = Math.abs(calculatedSpeedKmh - reliableRaw) <= Math.max(6, reliableRaw * 0.6);
     combinedSpeed = calculatedIsPlausible
-      ? reliableRaw * 0.72 + calculatedSpeedKmh * 0.28
+      ? reliableRaw * 0.84 + calculatedSpeedKmh * 0.16
       : reliableRaw;
     lastSpeedSourceAt = timestamp;
   } else if (calculatedSpeedKmh <= 80) {
     combinedSpeed = calculatedSpeedKmh;
     lastSpeedSourceAt = timestamp;
-  } else if (timestamp - lastSpeedSourceAt <= 2200) combinedSpeed = displayedSpeed;
+  } else if (timestamp - lastSpeedSourceAt <= 3000) combinedSpeed = displayedSpeed;
 
   if (combinedSpeed !== null) {
-    const alpha = displayedSpeed === null || combinedSpeed > displayedSpeed ? 0.58 : 0.38;
+    const alpha = displayedSpeed === null || combinedSpeed > displayedSpeed ? 0.72 : 0.58;
     displayedSpeed = displayedSpeed === null ? combinedSpeed : displayedSpeed + alpha * (combinedSpeed - displayedSpeed);
     if (movementState === "stojí") displayedSpeed = 0;
     if (displayedSpeed < 0.7 && movementState !== "jede") displayedSpeed = 0;
@@ -341,8 +346,31 @@ function showGpsError(error) {
 function renderVehicle(latitude, longitude, heading) {
   const coordinates = [latitude, longitude];
   appState.matchedPosition = coordinates;
-  if (!trainMarker) trainMarker = L.marker(coordinates, { icon: trainIcon, zIndexOffset: 900 }).addTo(map);
-  else trainMarker.setLatLng(coordinates);
+  const now = performance.now();
+  if (!trainMarker) {
+    trainMarker = L.marker(coordinates, { icon: trainIcon, zIndexOffset: 900 }).addTo(map);
+    markerAnimationTarget = coordinates;
+  } else {
+    if (markerAnimationFrame) cancelAnimationFrame(markerAnimationFrame);
+    const current = trainMarker.getLatLng();
+    markerAnimationFrom = [current.lat, current.lng];
+    markerAnimationTarget = coordinates;
+    markerAnimationStartedAt = now;
+    const updateInterval = lastMarkerTargetAt ? now - lastMarkerTargetAt : 1000;
+    const duration = Math.max(350, Math.min(1400, updateInterval * 0.92));
+    const animate = (frameTime) => {
+      const progress = Math.max(0, Math.min(1, (frameTime - markerAnimationStartedAt) / duration));
+      const eased = progress * (2 - progress);
+      trainMarker.setLatLng([
+        markerAnimationFrom[0] + (markerAnimationTarget[0] - markerAnimationFrom[0]) * eased,
+        markerAnimationFrom[1] + (markerAnimationTarget[1] - markerAnimationFrom[1]) * eased
+      ]);
+      if (progress < 1) markerAnimationFrame = requestAnimationFrame(animate);
+      else markerAnimationFrame = null;
+    };
+    markerAnimationFrame = requestAnimationFrame(animate);
+  }
+  lastMarkerTargetAt = now;
   if (Number.isFinite(heading)) {
     lastReliableHeading = heading;
     trainMarker.getElement()?.querySelector(".train-marker-content")
@@ -351,7 +379,9 @@ function renderVehicle(latitude, longitude, heading) {
   if (firstGpsFix) {
     map.setView(coordinates, 17);
     firstGpsFix = false;
-  } else if (appState.following) map.panTo(coordinates, { animate: true, duration: 0.7 });
+  } else if (appState.following && !map.getBounds().pad(-0.32).contains(coordinates)) {
+    map.panTo(coordinates, { animate: true, duration: 0.55 });
+  }
 }
 
 function updatePosition(position) {
@@ -427,7 +457,6 @@ function updatePosition(position) {
       userNote: ""
     };
     samples.push(sample);
-    trailLine.addLatLng([point.latitude, point.longitude]);
     persistSample(sample, samples.length - 1).catch(console.warn);
     if (samples.length % 5 === 0) persistSession().catch(console.warn);
     updateStatsPanel();
@@ -450,6 +479,7 @@ function updatePosition(position) {
     const fallback = movementState === "stojí" && stationaryMatchedAnchor
       ? stationaryMatchedAnchor : point;
     renderVehicle(fallback.latitude, fallback.longitude, lastReliableHeading);
+    if (recording) trailLine.addLatLng([fallback.latitude, fallback.longitude]);
   }
   lastFilteredPoint = point;
 }
@@ -486,6 +516,7 @@ window.addEventListener("railnavigator:track", (event) => {
       `${candidate.wayId}|${candidate.label}|${candidate.distance}m|${candidate.score}`
     );
     persistSample(lastSample, samples.length - 1).catch(console.warn);
+    trailLine.addLatLng([matched.latitude, matched.longitude]);
   }
 });
 
