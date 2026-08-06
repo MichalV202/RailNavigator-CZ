@@ -1,13 +1,14 @@
-const CACHE_NAME = "railnavigator-cz-v7-1";
+const CACHE_NAME = "railnavigator-cz-v8-0";
 const APP_FILES = [
   "./",
   "./index.html",
-  "./css/style.css?v=0.7.1",
-  "./js/app.js?v=0.7.1",
-  "./js/dmvs.js?v=0.7.1",
-  "./js/railway.js?v=0.7.1",
-  "./js/gps.js?v=0.7.1",
+  "./css/style.css?v=0.8.0",
+  "./js/app.js?v=0.8.0",
+  "./js/dmvs.js?v=0.8.0",
+  "./js/railway.js?v=0.8.0",
+  "./js/gps.js?v=0.8.0",
   "./data/dmvs-railways.geojson",
+  "./data/osm-railways.geojson",
   "./manifest.json",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
@@ -30,20 +31,17 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
-
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        if (response.ok && new URL(event.request.url).origin === self.location.origin) {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-        }
-        return response;
-      })
-      .catch(() => caches.match(event.request).then((cached) => {
-        if (cached) return cached;
-        if (event.request.mode === "navigate") return caches.match("./index.html");
-        return new Response("Offline", { status: 503, statusText: "Offline" });
-      }))
-  );
+  const url = new URL(event.request.url);
+  if (url.origin === self.location.origin && event.request.mode !== "navigate") {
+    event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
+      if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(event.request, response.clone()));
+      return response;
+    })));
+    return;
+  }
+  event.respondWith(fetch(event.request).catch(() => caches.match(event.request).then((cached) =>
+    cached || (event.request.mode === "navigate"
+      ? caches.match("./index.html")
+      : new Response("Offline", { status: 503, statusText: "Offline" }))
+  )));
 });
