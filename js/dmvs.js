@@ -3,6 +3,8 @@
 const DMVS_DATA_URL = "./data/dmvs-railways.geojson";
 const dmvsSourceValue = document.getElementById("track-source");
 let dmvsWays = [];
+const dmvsGrid = new Map();
+const GRID_SIZE_DEGREES = 0.004;
 
 if (window.proj4) {
   proj4.defs(
@@ -55,6 +57,36 @@ function approximateDistanceMetres(position, point) {
   );
 }
 
+function gridKey(latitude, longitude) {
+  return `${Math.floor(latitude / GRID_SIZE_DEGREES)}:${Math.floor(longitude / GRID_SIZE_DEGREES)}`;
+}
+
+function buildDmvsGrid() {
+  dmvsGrid.clear();
+  dmvsWays.forEach((way, index) => {
+    const occupied = new Set(way.geometry.map((point) => gridKey(point.lat, point.lon)));
+    occupied.forEach((key) => {
+      if (!dmvsGrid.has(key)) dmvsGrid.set(key, []);
+      dmvsGrid.get(key).push(index);
+    });
+  });
+}
+
+function candidateWayIndexes(position, radiusMetres) {
+  const latitudeCells = Math.ceil(radiusMetres / 111320 / GRID_SIZE_DEGREES) + 1;
+  const longitudeScale = Math.max(30000, 111320 * Math.cos(position.latitude * Math.PI / 180));
+  const longitudeCells = Math.ceil(radiusMetres / longitudeScale / GRID_SIZE_DEGREES) + 1;
+  const centreLatitude = Math.floor(position.latitude / GRID_SIZE_DEGREES);
+  const centreLongitude = Math.floor(position.longitude / GRID_SIZE_DEGREES);
+  const indexes = new Set();
+  for (let y = -latitudeCells; y <= latitudeCells; y += 1) {
+    for (let x = -longitudeCells; x <= longitudeCells; x += 1) {
+      (dmvsGrid.get(`${centreLatitude + y}:${centreLongitude + x}`) || []).forEach((index) => indexes.add(index));
+    }
+  }
+  return indexes;
+}
+
 async function loadDmvsData() {
   try {
     const response = await fetch(DMVS_DATA_URL, { cache: "no-cache" });
@@ -65,6 +97,7 @@ async function loadDmvsData() {
     if (sourceCrs === "EPSG:5514" && !window.proj4) throw new Error("Chybí převod souřadnic proj4");
     dmvsWays = data.features.map((feature, index) => featureToWay(feature, index, sourceCrs)).filter(Boolean);
     if (!dmvsWays.length) throw new Error("Datová sada neobsahuje osy kolejí");
+    buildDmvsGrid();
     const validTo = data.metadata?.valid_to || data.metadata?.date || "2026";
     setDmvsStatus(`ČÚZK ${validTo}`);
     map.attributionControl.addAttribution(
@@ -84,8 +117,10 @@ window.RailNavigatorDMVS = {
   ready: dmvsReady,
   getNearbyWays(position, radiusMetres) {
     const prefilterRadius = Math.max(radiusMetres * 1.5, 500);
-    return dmvsWays.filter((way) => way.geometry.some((point) =>
+    return [...candidateWayIndexes(position, prefilterRadius)].map((index) => dmvsWays[index]).filter((way) =>
+      way && way.geometry.some((point) =>
       approximateDistanceMetres(position, point) <= prefilterRadius
-    ));
+      )
+    );
   }
 };
