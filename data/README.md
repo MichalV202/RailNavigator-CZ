@@ -1,8 +1,8 @@
-# Data DMVS
+# Železniční data
 
 Do této složky patří zmenšený soubor `dmvs-railways.geojson` vytvořený z veřejné stavové sady DI. Do GitHub Pages nevkládejte původní krajské ZIP/JVF balíčky: jsou příliš velké pro mobilní aplikaci.
 
-GeoJSON musí obsahovat pouze liniové objekty os kolejí (`0100000021`) v souřadnicích WGS 84 a metadata:
+GeoJSON DMVS obsahuje pouze liniové objekty os kolejí (`0100000021`) v souřadnicích EPSG:5514 a metadata:
 
 ```json
 {
@@ -17,6 +17,6 @@ GeoJSON musí obsahovat pouze liniové objekty os kolejí (`0100000021`) v souř
 }
 ```
 
-Aktuální verze obsahuje výřez trasy Brno-Maloměřice – Modřice platný k 31. 7. 2026. Pokrývá šest územních balíčků: Maloměřice a Obřany, Židenice, Černovice, Brno-střed, Brno-jih a Modřice. Obsahuje 2 607 liniových úseků os kolejí a je uložený také do offline cache aplikace.
+Aktuální verze obsahuje 2 343 unikátních os kolejí z 18 územních balíčků pro koridor Brno-Maloměřice – Kyjov a přilehlá kolejiště, platných k 31. 7. 2026.
 
-Mimo pokrytí tohoto výřezu aplikace bezpečně používá OpenStreetMap a v panelu ukazuje `OSM (záloha)`.
+Soubor `osm-railways.geojson` obsahuje 3 354 železničních linií z dodaného exportu OpenStreetMap pro stejnou oblast. Slouží k doplnění názvů, čísel kolejí, vleček a jako záložní geometrie. Oba soubory jsou součástí offline cache aplikace.
