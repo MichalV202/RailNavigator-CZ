@@ -16,7 +16,7 @@ Veřejná sada DI neobsahuje neveřejná data technické infrastruktury ani inte
 
 ## OpenStreetMap a OpenRailwayMap
 
-OpenStreetMap se přes Overpass API používá jako záložní geometrie mimo výřez DMVS a současně jako doplňkový zdroj označení kolejí a chybějících vleček. Přenos označení na geometrii DMVS probíhá pouze za běhu aplikace a zdroj označení se uchovává samostatně.
+OpenStreetMap se používá jako lokální záložní geometrie a doplňkový zdroj označení kolejí a vleček. Soubor `data/osm-railways.geojson` je výřez dodaného exportu pro oblast Brno–Kyjov. Aplikace během jízdy neodesílá dotazy na Overpass API. Přenos označení na geometrii DMVS probíhá pouze za běhu aplikace a zdroj označení se uchovává samostatně.
 
 - Zdroj: https://www.openstreetmap.org/
 - Licence databáze: Open Data Commons Open Database License (ODbL)
