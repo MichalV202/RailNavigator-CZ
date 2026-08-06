@@ -4,11 +4,11 @@ const trackValue = document.getElementById("track");
 const trackDistanceValue = document.getElementById("track-distance");
 const trackConfidenceValue = document.getElementById("track-confidence");
 const trackSourceValue = document.getElementById("track-source");
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
-const SEARCH_RADIUS_METRES = 450;
+const OSM_DATA_URL = "./data/osm-railways.geojson";
+const SEARCH_RADIUS_METRES = 320;
 const MAX_TRACK_DISTANCE_METRES = 45;
-const REFRESH_DISTANCE_METRES = 120;
-const REFRESH_INTERVAL_MS = 45000;
+const REFRESH_DISTANCE_METRES = 90;
+const REFRESH_INTERVAL_MS = 30000;
 
 let railwayWays = [];
 let lastQueryPosition = null;
@@ -18,6 +18,9 @@ let lockedWayId = null;
 let challengerWayId = null;
 let challengerWins = 0;
 let highlightedWayId = null;
+let osmWays = [];
+let osmMetadata = {};
+let previousMatchedPoint = null;
 const rollingScores = new Map();
 const selectedTrackLine = L.polyline([], {
   color: "#00e5ff",
@@ -107,26 +110,81 @@ function geometryMidpoint(geometry) {
   return geometry[Math.floor(geometry.length / 2)];
 }
 
-function geometryAroundMatch(geometry, segmentIndex, radiusMetres = 130) {
-  let startIndex = segmentIndex;
-  let endIndex = Math.min(geometry.length - 1, segmentIndex + 1);
-  let distance = 0;
-  while (startIndex > 0 && distance < radiusMetres) {
-    distance += distanceBetweenPositions(
-      { latitude: geometry[startIndex].lat, longitude: geometry[startIndex].lon },
-      { latitude: geometry[startIndex - 1].lat, longitude: geometry[startIndex - 1].lon }
-    );
-    startIndex -= 1;
+function interpolatePosition(from, to, distanceFromStart, totalDistance) {
+  const ratio = totalDistance > 0 ? Math.max(0, Math.min(1, distanceFromStart / totalDistance)) : 0;
+  return {
+    latitude: from.latitude + (to.latitude - from.latitude) * ratio,
+    longitude: from.longitude + (to.longitude - from.longitude) * ratio
+  };
+}
+
+function geometryAroundMatch(geometry, segmentIndex, matched, radiusMetres = 42) {
+  const centre = { latitude: matched.latitude, longitude: matched.longitude };
+  const before = [];
+  const after = [];
+  let cursor = centre;
+  let remaining = radiusMetres;
+  for (let index = segmentIndex; index >= 0 && remaining > 0; index -= 1) {
+    const target = { latitude: geometry[index].lat, longitude: geometry[index].lon };
+    const length = distanceBetweenPositions(cursor, target);
+    if (length > remaining) {
+      before.unshift(interpolatePosition(cursor, target, remaining, length));
+      remaining = 0;
+    } else {
+      before.unshift(target);
+      remaining -= length;
+      cursor = target;
+    }
   }
-  distance = 0;
-  while (endIndex < geometry.length - 1 && distance < radiusMetres) {
-    distance += distanceBetweenPositions(
-      { latitude: geometry[endIndex].lat, longitude: geometry[endIndex].lon },
-      { latitude: geometry[endIndex + 1].lat, longitude: geometry[endIndex + 1].lon }
-    );
-    endIndex += 1;
+  cursor = centre;
+  remaining = radiusMetres;
+  for (let index = segmentIndex + 1; index < geometry.length && remaining > 0; index += 1) {
+    const target = { latitude: geometry[index].lat, longitude: geometry[index].lon };
+    const length = distanceBetweenPositions(cursor, target);
+    if (length > remaining) {
+      after.push(interpolatePosition(cursor, target, remaining, length));
+      remaining = 0;
+    } else {
+      after.push(target);
+      remaining -= length;
+      cursor = target;
+    }
   }
-  return geometry.slice(startIndex, endIndex + 1).map((point) => [point.lat, point.lon]);
+  return [...before, centre, ...after].map((point) => [point.latitude, point.longitude]);
+}
+
+function osmFeatureToWay(feature, index) {
+  if (feature?.geometry?.type !== "LineString") return null;
+  const geometry = feature.geometry.coordinates.map((point) => ({ lon: point[0], lat: point[1] }));
+  if (geometry.length < 2) return null;
+  const properties = feature.properties || {};
+  return {
+    id: properties["@id"] || feature.id || `osm-local:${index}`,
+    geometry,
+    tags: { ...properties, source: "OpenStreetMap" }
+  };
+}
+
+async function loadLocalOsmData() {
+  const response = await fetch(OSM_DATA_URL, { cache: "no-cache" });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = await response.json();
+  osmMetadata = data.metadata || {};
+  osmWays = (data.features || []).map(osmFeatureToWay).filter(Boolean);
+  return osmWays.length;
+}
+
+const osmReady = loadLocalOsmData().catch((error) => {
+  console.warn("Lokální železniční podklad OSM se nepodařilo načíst:", error);
+  osmWays = [];
+  return 0;
+});
+
+function nearbyLocalOsmWays(position, radiusMetres) {
+  const prefilterRadius = Math.max(radiusMetres * 1.35, 430);
+  return osmWays.filter((way) => way.geometry.some((point) =>
+    distanceBetweenPositions(position, { latitude: point.lat, longitude: point.lon }) <= prefilterRadius
+  ));
 }
 
 function copyOsmReferencesToDmvs(dmvsWays, osmWays) {
@@ -201,11 +259,20 @@ function renderSupplementalLabels() {
 function candidateScore(position, measurement, way) {
   const accuracy = Math.max(4, Number(position.accuracy) || 20);
   const distanceScore = measurement.distance * (8 / Math.min(accuracy, 24));
-  const directionPenalty = Number.isFinite(position.heading) && Number(position.speedKmh) >= 2
-    ? directionDifference(position.heading, measurement.bearing) * 0.1
+  const directionPenalty = Number.isFinite(position.heading) && Number(position.speedKmh) >= 1.5
+    ? directionDifference(position.heading, measurement.bearing) * (Number(position.speedKmh) >= 8 ? 0.24 : 0.14)
     : 0;
   const unnamedPenalty = describeTrack(way.tags) === "bez označení" ? 0.35 : 0;
-  return distanceScore + directionPenalty + unnamedPenalty;
+  const sourceBonus = way.tags?.source === "ČÚZK/DMVS" ? -0.4 : 0;
+  let continuityPenalty = 0;
+  if (previousMatchedPoint && String(way.id) !== String(lockedWayId)) {
+    const candidateJump = distanceBetweenPositions(previousMatchedPoint, {
+      latitude: measurement.latitude, longitude: measurement.longitude
+    });
+    const plausibleTravel = Math.max(12, (Number(position.speedKmh) || 0) * 0.75 + accuracy);
+    continuityPenalty = Math.max(0, candidateJump - plausibleTravel) * 0.12;
+  }
+  return distanceScore + directionPenalty + unnamedPenalty + sourceBonus + continuityPenalty;
 }
 
 function updateNearestTrack(position) {
@@ -216,7 +283,7 @@ function updateNearestTrack(position) {
     const measurement = measureWay(position, way.geometry);
     const instantScore = candidateScore(position, measurement, way);
     const previousScore = rollingScores.get(String(way.id));
-    const stableScore = previousScore === undefined ? instantScore : previousScore * 0.7 + instantScore * 0.3;
+    const stableScore = previousScore === undefined ? instantScore : previousScore * 0.55 + instantScore * 0.45;
     rollingScores.set(String(way.id), stableScore);
     candidates.push({ way, ...measurement, instantScore, stableScore });
   }
@@ -236,8 +303,8 @@ function updateNearestTrack(position) {
   const starting = position.movementState === "rozjíždí se";
   const allowedDistance = Math.max(MAX_TRACK_DISTANCE_METRES, Number(position.accuracy) || 0);
   const lockedLost = lockedCandidate.distance > allowedDistance * 1.5;
-  const requiredWins = lockedLost ? 2 : stationary ? 12 : starting ? 4 : Number(position.speedKmh) < 5 ? 7 : 5;
-  const requiredMargin = stationary ? 8 : Number(position.speedKmh) < 5 ? 4.5 : 3;
+  const requiredWins = lockedLost ? 2 : stationary ? 14 : starting ? 3 : Number(position.speedKmh) < 5 ? 6 : 4;
+  const requiredMargin = stationary ? 9 : Number(position.speedKmh) < 5 ? 4 : 2.4;
 
   if (String(best.way.id) !== String(lockedWayId)
       && (lockedLost || best.stableScore + requiredMargin < lockedCandidate.stableScore)) {
@@ -274,9 +341,11 @@ function updateNearestTrack(position) {
     highlightedWayId = selected.way.id;
     selectedTrackLine._railSegmentIndex = selected.segmentIndex;
     selectedTrackLine.setLatLngs(onTrack
-      ? geometryAroundMatch(selected.way.geometry, selected.segmentIndex)
+      ? geometryAroundMatch(selected.way.geometry, selected.segmentIndex, selected)
       : []);
   }
+
+  if (onTrack) previousMatchedPoint = { latitude: selected.latitude, longitude: selected.longitude };
 
   const detail = {
     wayId: selected.way.id,
@@ -304,7 +373,6 @@ function updateNearestTrack(position) {
 async function loadRailways(position) {
   queryInProgress = true;
   trackValue.textContent = "hledám…";
-  const query = `[out:json][timeout:15];(way(around:${SEARCH_RADIUS_METRES},${position.latitude},${position.longitude})[railway~"^(rail|light_rail|narrow_gauge)$"];way(around:${SEARCH_RADIUS_METRES},${position.latitude},${position.longitude})[railway="platform_edge"][ref];);out tags geom;`;
   let dmvsNearbyWays = [];
 
   try {
@@ -313,28 +381,24 @@ async function loadRailways(position) {
       await dmvs.ready;
       dmvsNearbyWays = dmvs.getNearbyWays(position, SEARCH_RADIUS_METRES);
     }
-
-    const response = await fetch(`${OVERPASS_URL}?data=${encodeURIComponent(query)}`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
-    const elements = Array.isArray(data.elements) ? data.elements : [];
-    const osmWays = elements.filter((element) => /^(rail|light_rail|narrow_gauge)$/.test(element.tags?.railway || ""));
-    copyOsmReferencesToDmvs(dmvsNearbyWays, osmWays);
+    await osmReady;
+    const localOsmWays = nearbyLocalOsmWays(position, SEARCH_RADIUS_METRES);
+    copyOsmReferencesToDmvs(dmvsNearbyWays, localOsmWays);
     const supplementalOsmWays = dmvsNearbyWays.length
-      ? osmWays.filter((way) => {
+      ? localOsmWays.filter((way) => {
           if (!Array.isArray(way.geometry) || !way.geometry.length) return false;
           const middle = geometryMidpoint(way.geometry);
           return dmvsNearbyWays.every((dmvsWay) => measureWay({
             latitude: middle.lat, longitude: middle.lon
           }, dmvsWay.geometry).distance > 8);
         })
-      : osmWays;
+      : localOsmWays;
     railwayWays = [...dmvsNearbyWays, ...supplementalOsmWays];
-    addPlatformReferences(elements);
     renderSupplementalLabels();
-    if (dmvsNearbyWays.length && osmWays.length) trackSourceValue.textContent = "ČÚZK + OSM";
+    if (dmvsNearbyWays.length && localOsmWays.length) trackSourceValue.textContent = "ČÚZK + OSM lokálně";
     else if (dmvsNearbyWays.length) trackSourceValue.textContent = "ČÚZK";
-    else trackSourceValue.textContent = "OSM";
+    else if (localOsmWays.length) trackSourceValue.textContent = "OSM lokálně";
+    else trackSourceValue.textContent = "mimo stažený podklad";
     lastQueryPosition = position;
     lastQueryTime = Date.now();
     rollingScores.clear();
@@ -346,17 +410,8 @@ async function loadRailways(position) {
       supplementalTrackLabels.clearLayers();
     } else updateNearestTrack(position);
   } catch (error) {
-    if (dmvsNearbyWays.length) {
-      railwayWays = dmvsNearbyWays;
-      trackSourceValue.textContent = "ČÚZK (OSM offline)";
-      supplementalTrackLabels.clearLayers();
-      lastQueryPosition = position;
-      lastQueryTime = Date.now();
-      updateNearestTrack(position);
-    } else {
-      trackValue.textContent = "data nedostupná";
-      console.warn("Načtení železničních dat selhalo:", error);
-    }
+    trackValue.textContent = "data nedostupná";
+    console.warn("Načtení lokálních železničních dat selhalo:", error);
   } finally {
     queryInProgress = false;
   }
