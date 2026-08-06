@@ -1,7 +1,7 @@
 {
   "name": "RailNavigator CZ",
   "short_name": "RailNavigator",
-  "description": "Mobilní železniční navigace s GPS, stabilním přiřazením koleje a diagnostickým záznamem jízdy.",
+  "description": "Mobilní železniční navigace s GPS, lokálním podkladem Brno–Kyjov a diagnostickým záznamem jízdy.",
   "lang": "cs",
   "start_url": "./",
   "scope": "./",
